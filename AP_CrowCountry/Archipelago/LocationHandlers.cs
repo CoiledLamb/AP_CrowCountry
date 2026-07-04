@@ -192,9 +192,12 @@ public class LocationHandlers
     ///   made (we may already hold the key from the multiworld). Force the
     ///   branch by checked-state: unchecked -> not-owned flow (take prompt),
     ///   checked -> owned flow ("thanks" dialog, key model stays hidden).
-    /// - "set item INT" is the vanilla grant: suppress it and send the check.
-    /// - "set ItemAction strings" builds the toast from the vanilla item with
-    ///   a hardcoded icon: skip it and show our own truthful toast instead.
+    /// - "set item INT" is the vanilla grant: suppress it, send the check,
+    ///   show our own truthful toast, AND skip the vanilla toast-builder
+    ///   state ("set ItemAction strings") it flows into -- redirecting the
+    ///   FSM straight into that state would run its actions (overwriting our
+    ///   popup with the vanilla item name + hardcoded icon) because this
+    ///   prefix does not re-fire for a redirect it just made.
     /// </summary>
     private static void HandleKeyInteractable(Fsm __instance, ref FsmState toState, Location keyLoc) {
         bool isChecked = ArchipelagoClient.ServerData.CheckedLocations.Contains(keyLoc.apid);
@@ -210,10 +213,14 @@ public class LocationHandlers
         }
         else if (toState.Name.IndexOf("set item INT") != -1) {
             SendAndPopup(keyLoc, "key interactable");
-            toState = toState.Transitions[0].ToFsmState;
-        }
-        else if (toState.Name.IndexOf("set ItemAction strings") != -1) {
-            toState = toState.Transitions[0].ToFsmState;
+            var next = toState.Transitions[0].ToFsmState;
+            // hop over the vanilla "set ItemAction strings" toast builder so
+            // it can't clobber the popup we just set; the following states
+            // ("set UI sfx" / "set UI bools N") still fire the toast, reading
+            // our globals
+            if (next.Name.IndexOf("ItemAction") != -1 && next.Transitions.Length > 0)
+                next = next.Transitions[0].ToFsmState;
+            toState = next;
         }
     }
 
