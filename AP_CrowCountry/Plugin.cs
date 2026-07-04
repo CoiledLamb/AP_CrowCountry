@@ -103,5 +103,6 @@ public class Plugin : BaseUnityPlugin
         }
         ItemFinder.Update();
         ArchipelagoClient.ApplyPendingItems();
+        ArchipelagoClient.CheckGoalCompletion();
     }
 }

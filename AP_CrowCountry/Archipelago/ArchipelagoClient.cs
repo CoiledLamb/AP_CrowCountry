@@ -13,6 +13,7 @@ using System.Collections.Generic;
 using System.IO;
 using Newtonsoft.Json;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 namespace APCrowCountry.Archipelago;
 
@@ -24,9 +25,10 @@ public class ArchipelagoClient
     public static bool Authenticated;
     private bool attemptingConnection;
 
-    // Placeholder goal, must mirror Rules.py's completion_condition:
-    // the seed is complete once we hold the Pocket Light.
-    private const string GoalItem = "Pocket Light";
+    // Goal: defeat Edward Crowley. His death is the only way the Ending
+    // Sequence scene ever loads (the boss FSM's "load ending" state, in both
+    // combat and Exploration Mode), so scene arrival = goal complete.
+    private const string EndingSceneName = "Ending Sequence";
     private bool goalSent;
 
     public static ArchipelagoData ServerData = new();
@@ -190,11 +192,19 @@ public class ArchipelagoClient
     {
         // application happens on the main thread in ApplyPendingItems, indexed
         // against the current save's globals timeline (see SaveSync); here we
-        // only drain the queue and watch for the goal item. The goal check runs
-        // for replayed items too, so a goal that failed to send before a
-        // disconnect goes out on reconnect.
-        var receivedItem = helper.DequeueItem();
-        if (helper.GetItemName(receivedItem.Item) == GoalItem) SendGoalCompletion();
+        // only drain the queue
+        helper.DequeueItem();
+    }
+
+    /// <summary>
+    /// called every frame from Plugin.Update: reaching the Ending Sequence
+    /// scene means Edward Crowley is dead -> report the goal
+    /// </summary>
+    public void CheckGoalCompletion()
+    {
+        if (goalSent || !Authenticated || SaveSync.SeedMismatch) return;
+        if (SceneManager.GetActiveScene().name == EndingSceneName)
+            SendGoalCompletion();
     }
 
     /// <summary>
