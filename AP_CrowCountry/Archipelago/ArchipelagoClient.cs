@@ -6,6 +6,7 @@ using Archipelago.MultiClient.Net.BounceFeatures.DeathLink;
 using Archipelago.MultiClient.Net.Enums;
 using Archipelago.MultiClient.Net.Helpers;
 using Archipelago.MultiClient.Net.MessageLog.Messages;
+using Archipelago.MultiClient.Net.Models;
 using Archipelago.MultiClient.Net.Packets;
 using APCrowCountry.Utils;
 using System.Collections.Generic;
@@ -27,6 +28,14 @@ public class ArchipelagoClient
     private DeathLinkHandler DeathLinkHandler;
     private ArchipelagoSession session;
     public Dictionary<long, Location> Locations;
+
+    public class ScoutedInfo
+    {
+        public string ItemName;
+        public string PlayerName;
+        public bool ForMe;
+    }
+    public Dictionary<long, ScoutedInfo> ScoutedLocations = new();
 
     /// <summary>
     /// call to connect to an Archipelago session. Connection info should already be set up on ServerData
@@ -111,6 +120,7 @@ public class ArchipelagoClient
             Locations = LoadLocationsFromFile();
             ItemFinder.InitializeItemTypes();
             ItemFinder.InitializeControlledBools();
+            ScoutAllLocations();
 
             ItemFinder.itemTypes["Heals Small MAX"].Value = 999;
             ItemFinder.itemTypes["Heals Large MAX"].Value = 999;
@@ -215,6 +225,50 @@ public class ArchipelagoClient
             session.Locations.CompleteLocationChecksAsync(apid);
         } catch (Exception e) {
             Plugin.BepinLogger.LogError(e);
+        }
+    }
+
+    /// <summary>
+    /// fetch what item every one of our locations holds, so checks can show
+    /// a truthful popup the moment they fire
+    /// </summary>
+    private void ScoutAllLocations()
+    {
+        try {
+            int ownSlot = session.ConnectionInfo.Slot;
+            session.Locations.ScoutLocationsAsync(Locations.Keys.ToArray()).ContinueWith(t => {
+                if (t.IsFaulted || t.Result?.Locations == null) {
+                    Plugin.BepinLogger.LogError($"Location scout failed: {t.Exception}");
+                    return;
+                }
+                var scouted = new Dictionary<long, ScoutedInfo>();
+                foreach (NetworkItem item in t.Result.Locations) {
+                    scouted[item.Location] = new ScoutedInfo {
+                        ItemName = session.Items.GetItemName(item.Item) ?? $"Item {item.Item}",
+                        PlayerName = session.Players.GetPlayerName(item.Player) ?? $"Player {item.Player}",
+                        ForMe = item.Player == ownSlot,
+                    };
+                }
+                ScoutedLocations = scouted;
+                ArchipelagoConsole.LogMessage($"Scouted {scouted.Count} locations.");
+            });
+        } catch (Exception e) {
+            Plugin.BepinLogger.LogError(e);
+        }
+    }
+
+    /// <summary>
+    /// show the game's native item toast for a just-checked location:
+    /// our own items by name+icon, other players' items as "Sent: X -> Y"
+    /// </summary>
+    public void ShowCheckPopup(long apid)
+    {
+        if (!ScoutedLocations.TryGetValue(apid, out ScoutedInfo info)) return;
+        if (info.ForMe) {
+            int icon = ItemFinder.itemIcons.TryGetValue(info.ItemName, out int i) ? i : ItemFinder.GenericIcon;
+            ItemFinder.ShowItemPopup("Obtained:", info.ItemName, icon);
+        } else {
+            ItemFinder.ShowItemPopup("Sent:", $"{info.ItemName} → {info.PlayerName}", ItemFinder.GenericIcon);
         }
     }
 

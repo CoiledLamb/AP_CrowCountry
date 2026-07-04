@@ -23,14 +23,37 @@ public class ItemFinder {
         "Ammo in Box MAX",
         "Shotgun in Box",
         "Shotgun in Box MAX",
+        "ItemActionDisplay",
+    };
+
+    public static Dictionary<string, FsmString> controlledStrings = new();
+
+    public static List<string> validStrings = new List<string>() {
+        "Glb ItemAction Action",
+        "Glb ItemAction Name",
     };
 
     public static Dictionary<string, FsmBool> controlledBools = new();
 
     public static List<string> validBools = new List<string>() {
         "light found",
-        "Handgun Laser"
+        "Handgun Laser",
+        "UI ItemAction",
     };
+
+    // vanilla ItemActionDisplay icon indexes, mined from the pickup FSMs
+    public static readonly Dictionary<string, int> itemIcons = new() {
+        { "Handgun Ammo", 14 },
+        { "Small Med Kit", 15 },
+        { "Large Med Kit", 16 },
+        { "Antidote", 17 },
+        { "Grenade", 18 },
+        { "Shotgun Ammo", 20 },
+        { "Magnum Ammo", 14 },
+        { "Pocket Light", 29 },
+        { "Handgun Laser Sight", 30 },
+    };
+    public const int GenericIcon = 39; // "Paper" - neutral, used for other players' items
 
     // Equipment flags received from the multiworld. The game's "New Game"
     // flow resets all PlayMaker globals and loading a save overwrites them,
@@ -67,6 +90,27 @@ public class ItemFinder {
                 controlledBools.Add(boolVariables[i].Name, boolVariables[i]);
             }
         }
+        FsmString[] stringVariables = allVariables.Variables.StringVariables;
+        for (int i = 0; i < stringVariables.Length; i++) {
+            if (validStrings.Contains(stringVariables[i].Name)) {
+                controlledStrings.Add(stringVariables[i].Name, stringVariables[i]);
+            }
+        }
+    }
+
+    /// <summary>
+    /// drive the game's native "Obtained: X" toast with arbitrary contents.
+    /// Same mechanism the vanilla pickup FSMs use.
+    /// </summary>
+    public static void ShowItemPopup(string action, string itemName, int icon) {
+        if (!controlledStrings.ContainsKey("Glb ItemAction Name") ||
+            !controlledBools.ContainsKey("UI ItemAction") ||
+            !itemTypes.ContainsKey("ItemActionDisplay"))
+            return;
+        controlledStrings["Glb ItemAction Action"].Value = action;
+        controlledStrings["Glb ItemAction Name"].Value = itemName;
+        itemTypes["ItemActionDisplay"].Value = icon;
+        controlledBools["UI ItemAction"].Value = true;
     }
 
     public static void Update() {

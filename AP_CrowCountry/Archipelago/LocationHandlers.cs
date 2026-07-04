@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Diagnostics;
 using HarmonyLib;
 using HutongGames.PlayMaker;
@@ -45,6 +46,13 @@ public class LocationHandlers
             if (__instance.GameObjectName == "FLOW CODE" && __instance.GameObject.transform.parent.parent.parent.parent.name != "Pickup Trap" && __instance.GameObject.transform.parent.parent.parent.name.IndexOf("vending machine") == -1)
             {
                 //UnityEngine.Debug.Log(toState.Name);
+
+                // The pickup's display sequence ("set ItemAction" -> raised
+                // model branch -> toast) reads local FSM vars; overwrite them
+                // with the scouted AP item so vanilla presents the truth.
+                if (toState.Name.IndexOf("set ItemAction") != -1) {
+                    OverridePickupDisplay(__instance);
+                }
 
                 // Pickups
                 if (toState.Name.IndexOf("add item") != -1) {
@@ -147,6 +155,7 @@ public class LocationHandlers
             if (location.region == sceneName && location.id == id) {
                 UnityEngine.Debug.Log("Sending location " + location.apid + " from pickup");
                 Plugin.ArchipelagoClient.SendLocationCheck(location.apid);
+                Plugin.ArchipelagoClient.ShowCheckPopup(location.apid);
                 break;
             }
         }
@@ -161,6 +170,7 @@ public class LocationHandlers
             if (location.region == sceneName && location.id == "Wooden Crate "+ id) {
                 UnityEngine.Debug.Log("Sending location " + location.apid + " from pickup");
                 Plugin.ArchipelagoClient.SendLocationCheck(location.apid);
+                Plugin.ArchipelagoClient.ShowCheckPopup(location.apid);
                 break;
             }
         }
@@ -175,8 +185,64 @@ public class LocationHandlers
             if (location.region == sceneName && location.id == id) {
                 UnityEngine.Debug.Log("Sending location " + location.apid + " from trashcan");
                 Plugin.ArchipelagoClient.SendLocationCheck(location.apid);
+                Plugin.ArchipelagoClient.ShowCheckPopup(location.apid);
                 break;
             }
+        }
+    }
+
+    // vanilla ArrayPickup "item type" branch values, from the add-item grant states
+    private static readonly Dictionary<string, int> consumableTypeInts = new() {
+        { "Small Med Kit", 1 },
+        { "Large Med Kit", 2 },
+        { "Antidote", 3 },
+        { "Handgun Ammo", 4 },
+        { "Shotgun Ammo", 5 },
+        { "Magnum Ammo", 7 },
+        { "Grenade", 8 },
+    };
+
+    private static Location ResolveArrayPickup(Fsm __instance) {
+        string sceneName = __instance.GameObject.scene.name;
+        try {
+            string id = __instance.GameObject.transform.parent.parent.parent.parent.GetChild(0).name;
+            foreach (Location location in Plugin.ArchipelagoClient.Locations.Values)
+                if (location.region == sceneName && location.id == id) return location;
+        } catch { }
+        try {
+            var crate = __instance.GameObject.transform.parent.parent.parent.parent.parent.parent.parent;
+            if (crate.name.IndexOf("Wooden Crate") != -1) {
+                string id = crate.GetChild(0).name;
+                foreach (Location location in Plugin.ArchipelagoClient.Locations.Values)
+                    if (location.region == sceneName && location.id == "Wooden Crate " + id) return location;
+            }
+        } catch { }
+        return null;
+    }
+
+    /// <summary>
+    /// rewrite the pickup FSM's local display vars ("item name", "display
+    /// number", "item type") before its "set ItemAction" state runs, so the
+    /// vanilla toast + raised model show the scouted AP item. "item type" is
+    /// only retyped for consumables that have a native model; the grant is
+    /// still suppressed at "add item" regardless of type.
+    /// </summary>
+    public static void OverridePickupDisplay(Fsm __instance) {
+        Location loc = ResolveArrayPickup(__instance);
+        if (loc == null) return;
+        if (!Plugin.ArchipelagoClient.ScoutedLocations.TryGetValue(loc.apid, out var info)) return;
+
+        string display = info.ForMe ? info.ItemName : $"{info.ItemName} → {info.PlayerName}";
+        int icon = info.ForMe && ItemFinder.itemIcons.TryGetValue(info.ItemName, out int mapped)
+            ? mapped : ItemFinder.GenericIcon;
+
+        var nameVar = __instance.Variables.GetFsmString("item name");
+        if (nameVar != null) nameVar.Value = display;
+        var displayVar = __instance.Variables.GetFsmInt("display number");
+        if (displayVar != null) displayVar.Value = icon;
+        if (info.ForMe && consumableTypeInts.TryGetValue(info.ItemName, out int type)) {
+            var typeVar = __instance.Variables.GetFsmInt("item type");
+            if (typeVar != null) typeVar.Value = type;
         }
     }
 
