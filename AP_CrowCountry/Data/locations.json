@@ -118,5 +118,11 @@
         "pickup": false,
         "region": "Fairy Forest",
         "id": "Trash can 5"
+    },
+    {
+        "apid": 510202420,
+        "pickup": false,
+        "region": "Fairy Pool",
+        "id": "keyitem:water fairy"
     }
 ]

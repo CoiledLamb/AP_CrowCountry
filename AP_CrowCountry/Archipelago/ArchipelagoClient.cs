@@ -252,6 +252,9 @@ public class ArchipelagoClient
             case "Grenade": ItemFinder.AddToCounter("Grenades", 1); break;
             case "Pocket Light": ItemFinder.SetGlobalBool("light found"); break;
             case "Handgun Laser Sight": ItemFinder.SetGlobalBool("Handgun Laser"); break;
+            // key items are 0/1 owned flags, set once at apply time and
+            // never re-asserted (item: 13 gets consumed by the game)
+            case "Bronze Key": ItemFinder.SetGlobalInt("item: 2", 1); break;
         }
     }
 

@@ -45,6 +45,19 @@ public class LocationHandlers
 
         private static void HandleSwitchState(Fsm __instance, ref FsmState toState)
         {
+            // Key-item interactables (grant pattern "set item INT" -> toast;
+            // anatomy in datamine/KEYITEMS.md). Identified by a "keyitem:"
+            // marker in locations.json matched against ancestor object names.
+            if (__instance.GameObjectName == "FLOW CODE" || __instance.GameObjectName == "flowcode")
+            {
+                Location keyLoc = ResolveKeyInteractable(__instance);
+                if (keyLoc != null)
+                {
+                    HandleKeyInteractable(__instance, ref toState, keyLoc);
+                    return;
+                }
+            }
+
             if (__instance.GameObjectName == "FLOW CODE" && __instance.GameObject.transform.parent.parent.parent.parent.name != "Pickup Trap" && __instance.GameObject.transform.parent.parent.parent.name.IndexOf("vending machine") == -1)
             {
                 //UnityEngine.Debug.Log(toState.Name);
@@ -154,6 +167,55 @@ public class LocationHandlers
             }
         }
     }*/
+
+    /// <summary>
+    /// key-item locations use id "keyitem:&lt;ancestor object name&gt;";
+    /// match by walking the FSM object's transform ancestors
+    /// </summary>
+    private static Location ResolveKeyInteractable(Fsm __instance) {
+        string sceneName = __instance.GameObject.scene.name;
+        try {
+            foreach (Location location in Plugin.ArchipelagoClient.Locations.Values) {
+                if (location.region != sceneName || !location.id.StartsWith("keyitem:")) continue;
+                string marker = location.id.Substring("keyitem:".Length);
+                for (var t = __instance.GameObject.transform; t != null; t = t.parent)
+                    if (t.name == marker) return location;
+            }
+        } catch { }
+        return null;
+    }
+
+    /// <summary>
+    /// randomize a key-item interactable:
+    /// - "have item?" checks vanilla ownership at examine time, but under
+    ///   randomization ownership says nothing about whether the CHECK was
+    ///   made (we may already hold the key from the multiworld). Force the
+    ///   branch by checked-state: unchecked -> not-owned flow (take prompt),
+    ///   checked -> owned flow ("thanks" dialog, key model stays hidden).
+    /// - "set item INT" is the vanilla grant: suppress it and send the check.
+    /// - "set ItemAction strings" builds the toast from the vanilla item with
+    ///   a hardcoded icon: skip it and show our own truthful toast instead.
+    /// </summary>
+    private static void HandleKeyInteractable(Fsm __instance, ref FsmState toState, Location keyLoc) {
+        bool isChecked = ArchipelagoClient.ServerData.CheckedLocations.Contains(keyLoc.apid);
+
+        if (toState.Name.IndexOf("have item?") != -1) {
+            string ev = isChecked ? "y" : "n";
+            foreach (var t in toState.Transitions) {
+                if (t.EventName == ev) {
+                    toState = t.ToFsmState;
+                    break;
+                }
+            }
+        }
+        else if (toState.Name.IndexOf("set item INT") != -1) {
+            SendAndPopup(keyLoc, "key interactable");
+            toState = toState.Transitions[0].ToFsmState;
+        }
+        else if (toState.Name.IndexOf("set ItemAction strings") != -1) {
+            toState = toState.Transitions[0].ToFsmState;
+        }
+    }
 
     /// <summary>resolve trash cans / vending machines by their object name</summary>
     private static Location ResolveByObjectName(Fsm __instance) {

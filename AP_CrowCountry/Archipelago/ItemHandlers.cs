@@ -28,6 +28,10 @@ public class ItemFinder {
         "Flame in Box",
         "Flame in Box MAX",
         "ItemActionDisplay",
+        // key-item owned flags (0/1; only item: 13 is ever consumed by the
+        // game -- see datamine/KEYITEMS.md)
+        "item: 2", "item: 3", "item: 4", "item: 5", "item: 6", "item: 7",
+        "item: 8", "item: 9", "item: 10", "item: 11", "item: 12", "item: 13",
     };
 
     public static Dictionary<string, FsmString> controlledStrings = new();
@@ -56,6 +60,7 @@ public class ItemFinder {
         { "Magnum Ammo", 14 },
         { "Pocket Light", 29 },
         { "Handgun Laser Sight", 30 },
+        { "Bronze Key", 2 },
     };
     public const int GenericIcon = 39; // "Paper" - neutral, used for other players' items
 
@@ -120,6 +125,11 @@ public class ItemFinder {
     /// <summary>set an equipment flag global, e.g. "light found"</summary>
     public static void SetGlobalBool(string name) {
         if (controlledBools.TryGetValue(name, out var fsmBool)) fsmBool.Value = true;
+    }
+
+    /// <summary>set an int global, e.g. a key item's "item: N" owned flag</summary>
+    public static void SetGlobalInt(string name, int value) {
+        if (itemTypes.TryGetValue(name, out var fsmInt)) fsmInt.Value = value;
     }
 
     public static void Update() {
