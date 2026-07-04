@@ -55,9 +55,11 @@ public class Plugin : BaseUnityPlugin
     {
         // minimal HUD: one status line; everything else lives behind F1
         // (connection is normally config-driven - see chandler.apcrowcountry.cfg)
-        string status = ArchipelagoClient.Authenticated
-            ? $"AP: {ArchipelagoClient.ServerData.SlotName} connected"
-            : "AP: disconnected [F1]";
+        string status = SaveSync.SeedMismatch
+            ? "AP: SAVE IS FROM A DIFFERENT MULTIWORLD - randomizer disabled for it"
+            : ArchipelagoClient.Authenticated
+                ? $"AP: {ArchipelagoClient.ServerData.SlotName} connected"
+                : "AP: disconnected [F1]";
         GUI.Label(new Rect(16, 16, 300, 20), status);
 
         if (!showConnectUI)
@@ -100,5 +102,6 @@ public class Plugin : BaseUnityPlugin
             ArchipelagoClient.Connect();
         }
         ItemFinder.Update();
+        ArchipelagoClient.ApplyPendingItems();
     }
 }

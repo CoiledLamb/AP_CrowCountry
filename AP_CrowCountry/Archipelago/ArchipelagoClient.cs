@@ -24,6 +24,11 @@ public class ArchipelagoClient
     public static bool Authenticated;
     private bool attemptingConnection;
 
+    // Placeholder goal, must mirror Rules.py's completion_condition:
+    // the seed is complete once we hold the Pocket Light.
+    private const string GoalItem = "Pocket Light";
+    private bool goalSent;
+
     public static ArchipelagoData ServerData = new();
     private DeathLinkHandler DeathLinkHandler;
     private ArchipelagoSession session;
@@ -121,13 +126,7 @@ public class ArchipelagoClient
             ItemFinder.InitializeItemTypes();
             ItemFinder.InitializeControlledBools();
             ScoutAllLocations();
-
-            ItemFinder.itemTypes["Heals Small MAX"].Value = 999;
-            ItemFinder.itemTypes["Heals Large MAX"].Value = 999;
-            ItemFinder.itemTypes["Ammo in Box MAX"].Value = 999;
-            ItemFinder.itemTypes["Shotgun in Box MAX"].Value = 999;
-            ItemFinder.itemTypes["Antidotes MAX"].Value = 999;
-            ItemFinder.itemTypes["Grenades MAX"].Value = 999;
+            SaveSync.ReevaluateSeedBinding();
 
             ArchipelagoConsole.LogMessage(outText);
         }
@@ -156,6 +155,7 @@ public class ArchipelagoClient
         session?.Socket.DisconnectAsync();
         session = null;
         Authenticated = false;
+        goalSent = false;
     }
 
     public void SendMessage(string message)
@@ -164,36 +164,77 @@ public class ArchipelagoClient
     }
 
     /// <summary>
+    /// report goal completion to the server (idempotent server-side; the
+    /// guard just avoids spamming the packet once per replayed item)
+    /// </summary>
+    private void SendGoalCompletion()
+    {
+        if (goalSent || session == null) return;
+        try
+        {
+            session.Socket.SendPacketAsync(new StatusUpdatePacket { Status = ArchipelagoClientState.ClientGoal });
+            goalSent = true;
+            ArchipelagoConsole.LogMessage("Goal complete! Victory reported to the server.");
+        }
+        catch (Exception e)
+        {
+            Plugin.BepinLogger.LogError(e);
+        }
+    }
+
+    /// <summary>
     /// we received an item so reward it here
     /// </summary>
     /// <param name="helper">item helper which we can grab our item from</param>
     private void OnItemReceived(ReceivedItemsHelper helper)
     {
+        // application happens on the main thread in ApplyPendingItems, indexed
+        // against the current save's globals timeline (see SaveSync); here we
+        // only drain the queue and watch for the goal item. The goal check runs
+        // for replayed items too, so a goal that failed to send before a
+        // disconnect goes out on reconnect.
         var receivedItem = helper.DequeueItem();
+        if (helper.GetItemName(receivedItem.Item) == GoalItem) SendGoalCompletion();
+    }
 
-        if (helper.Index < ServerData.Index) return;
+    /// <summary>
+    /// apply every received item the current save's globals don't have yet.
+    /// Runs once per frame on the main thread; SaveSync.AppliedIndex is
+    /// rolled back/forward by save loads so items are applied exactly once
+    /// per save timeline.
+    /// </summary>
+    public void ApplyPendingItems()
+    {
+        if (!Authenticated || session == null || !SaveSync.CanApplyItems) return;
+        var items = session.Items.AllItemsReceived; // immutable snapshot
+        while (SaveSync.AppliedIndex < items.Count)
+        {
+            var item = items[SaveSync.AppliedIndex];
+            string name = session.Items.GetItemName(item.Item) ?? $"Item {item.Item}";
+            try
+            {
+                ApplyItem(name);
+            }
+            catch (Exception e)
+            {
+                Plugin.BepinLogger.LogError($"Failed applying item '{name}': {e}");
+            }
+            SaveSync.AppliedIndex++;
+        }
+    }
 
-        ServerData.Index++;
-
-        // TODO reward the item here
-        // if items can be received while in an invalid state for actually handling them, they can be placed in a local
-        // queue to be handled later
-        if (helper.GetItemName(receivedItem.Item) == "Small Med Kit") {
-            ItemFinder.itemTypes["Heals Small"].Value++;
-        } else if (helper.GetItemName(receivedItem.Item) == "Large Med Kit") {
-            ItemFinder.itemTypes["Heals Large"].Value++;
-        } else if (helper.GetItemName(receivedItem.Item) == "Antidote") {
-            ItemFinder.itemTypes["Antidotes"].Value++;
-        } else if (helper.GetItemName(receivedItem.Item) == "Pocket Light") {
-            ItemFinder.receivedBools.Add("light found");
-        } else if (helper.GetItemName(receivedItem.Item) == "Handgun Laser Sight") {
-            ItemFinder.receivedBools.Add("Handgun Laser");
-        } else if (helper.GetItemName(receivedItem.Item) == "Handgun Ammo") {
-            ItemFinder.itemTypes["Ammo in Box"].Value += 8;
-        } else if (helper.GetItemName(receivedItem.Item) == "Shotgun Ammo") {
-            ItemFinder.itemTypes["Shotgun in Box"].Value += 8;
-        } else if (helper.GetItemName(receivedItem.Item) == "Grenade") {
-            ItemFinder.itemTypes["Grenades"].Value++;
+    private static void ApplyItem(string name)
+    {
+        switch (name)
+        {
+            case "Small Med Kit": ItemFinder.AddToCounter("Heals Small", 1); break;
+            case "Large Med Kit": ItemFinder.AddToCounter("Heals Large", 1); break;
+            case "Antidote": ItemFinder.AddToCounter("Antidotes", 1); break;
+            case "Handgun Ammo": ItemFinder.AddToCounter("Ammo in Box", 8); break;
+            case "Shotgun Ammo": ItemFinder.AddToCounter("Shotgun in Box", 8); break;
+            case "Grenade": ItemFinder.AddToCounter("Grenades", 1); break;
+            case "Pocket Light": ItemFinder.SetGlobalBool("light found"); break;
+            case "Handgun Laser Sight": ItemFinder.SetGlobalBool("Handgun Laser"); break;
         }
     }
 
@@ -221,8 +262,24 @@ public class ArchipelagoClient
     public void SendLocationCheck(long apid)
     {
         try {
-            ServerData.CheckedLocations.Add(apid);
+            if (!ServerData.CheckedLocations.Contains(apid))
+                ServerData.CheckedLocations.Add(apid);
             session.Locations.CompleteLocationChecksAsync(apid);
+        } catch (Exception e) {
+            Plugin.BepinLogger.LogError(e);
+        }
+    }
+
+    /// <summary>
+    /// push checks recorded in a save's sidecar (made in an earlier session,
+    /// possibly offline) to the server; no-op while disconnected because the
+    /// connect handshake already sends all of ServerData.CheckedLocations
+    /// </summary>
+    public void ResendChecks(IEnumerable<long> apids)
+    {
+        if (!Authenticated || session == null) return;
+        try {
+            session.Locations.CompleteLocationChecksAsync(apids.ToArray());
         } catch (Exception e) {
             Plugin.BepinLogger.LogError(e);
         }

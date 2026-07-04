@@ -8,7 +8,6 @@ public class ArchipelagoData
     public string Uri;
     public string SlotName;
     public string Password;
-    public int Index;
 
     public List<long> CheckedLocations;
 
@@ -17,6 +16,8 @@ public class ArchipelagoData
     /// load is valid to the room it's connecting to.
     /// </summary>
     private string seed;
+
+    public string Seed => seed;
 
     private Dictionary<string, object> slotData;
 

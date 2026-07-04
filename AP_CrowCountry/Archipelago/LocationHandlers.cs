@@ -26,10 +26,12 @@ public class LocationHandlers
     {
         public static void Prefix(Fsm __instance, ref FsmState toState)
         {
-            // Not connected -> no location table; leave the game fully vanilla.
-            // Also never let an exception escape into Fsm.SwitchState: a throw
-            // here kills the state transition and soft-locks the player.
-            if (!ArchipelagoClient.Authenticated || Plugin.ArchipelagoClient?.Locations == null)
+            // Not connected (or the loaded save belongs to another multiworld)
+            // -> leave the game fully vanilla. Also never let an exception
+            // escape into Fsm.SwitchState: a throw here kills the state
+            // transition and soft-locks the player.
+            if (!ArchipelagoClient.Authenticated || SaveSync.SeedMismatch ||
+                Plugin.ArchipelagoClient?.Locations == null)
                 return;
             try
             {

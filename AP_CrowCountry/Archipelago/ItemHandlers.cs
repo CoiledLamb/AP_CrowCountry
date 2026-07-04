@@ -55,11 +55,12 @@ public class ItemFinder {
     };
     public const int GenericIcon = 39; // "Paper" - neutral, used for other players' items
 
-    // Equipment flags received from the multiworld. The game's "New Game"
-    // flow resets all PlayMaker globals and loading a save overwrites them,
-    // so a one-shot write at receive time gets clobbered; Update() re-asserts
-    // these every frame instead.
-    public static readonly HashSet<string> receivedBools = new();
+    // consumable caps; the game's new-game/save-load flows overwrite these
+    // globals, so Update() re-asserts them while connected
+    private static readonly string[] uncappedMaxVars = {
+        "Heals Small MAX", "Heals Large MAX", "Ammo in Box MAX",
+        "Shotgun in Box MAX", "Antidotes MAX", "Grenades MAX",
+    };
 
     private static bool initializedItems = false;
     private static bool initializedBools = false;
@@ -113,15 +114,26 @@ public class ItemFinder {
         controlledBools["UI ItemAction"].Value = true;
     }
 
-    public static void Update() {
-        // vanilla light pickup only gets suppressed while actually randomized
-        if (!ArchipelagoClient.Authenticated) return;
+    /// <summary>increment a consumable counter global, e.g. "Heals Small"</summary>
+    public static void AddToCounter(string name, int delta) {
+        if (itemTypes.TryGetValue(name, out var fsmInt)) fsmInt.Value += delta;
+    }
 
-        foreach (string name in receivedBools) {
-            if (controlledBools.TryGetValue(name, out var fsmBool) && !fsmBool.Value)
-                fsmBool.Value = true;
+    /// <summary>set an equipment flag global, e.g. "light found"</summary>
+    public static void SetGlobalBool(string name) {
+        if (controlledBools.TryGetValue(name, out var fsmBool)) fsmBool.Value = true;
+    }
+
+    public static void Update() {
+        // wrong save for this multiworld -> stay fully vanilla
+        if (!ArchipelagoClient.Authenticated || SaveSync.SeedMismatch) return;
+
+        foreach (string name in uncappedMaxVars) {
+            if (itemTypes.TryGetValue(name, out var fsmInt) && fsmInt.Value != 999)
+                fsmInt.Value = 999;
         }
 
+        // vanilla light pickup only gets suppressed while actually randomized
         var anyPocketLight = GameObject.Find("pocket light setup");
         if (anyPocketLight != null) {
             anyPocketLight.SetActive(false);
