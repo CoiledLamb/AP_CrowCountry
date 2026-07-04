@@ -247,21 +247,37 @@ public class LocationHandlers
         { "Grenade", 8 },
     };
 
+    /// <summary>
+    /// resolve an ArrayPickup FSM to its mapped location. The number-child id
+    /// is NOT unique within a scene (crate/bottle inner pickups share "0"),
+    /// so container detection is exclusive: a pickup inside a Wooden Crate
+    /// only ever matches a "Wooden Crate N" id, a Glass Bottle matches its
+    /// number, an unknown container matches nothing (stays vanilla).
+    /// Hierarchy: [container]/model/pickup/ArrayPickup/{number-child, code/
+    /// examine set/examine set parent/FLOW CODE}; bare pickups sit under a
+    /// "pickups" group instead of a container's "pickup" node.
+    /// </summary>
     private static Location ResolveArrayPickup(Fsm __instance) {
         string sceneName = __instance.GameObject.scene.name;
+        string wantedId;
         try {
-            string id = __instance.GameObject.transform.parent.parent.parent.parent.GetChild(0).name;
-            foreach (Location location in Plugin.ArchipelagoClient.Locations.Values)
-                if (location.region == sceneName && location.id == id) return location;
-        } catch { }
-        try {
-            var crate = __instance.GameObject.transform.parent.parent.parent.parent.parent.parent.parent;
-            if (crate.name.IndexOf("Wooden Crate") != -1) {
-                string id = crate.GetChild(0).name;
-                foreach (Location location in Plugin.ArchipelagoClient.Locations.Values)
-                    if (location.region == sceneName && location.id == "Wooden Crate " + id) return location;
+            var ap = __instance.GameObject.transform.parent.parent.parent.parent; // ArrayPickup
+            if (ap == null || ap.childCount == 0) return null;
+            string num = ap.GetChild(0).name;
+            var group = ap.parent;                                   // "pickup" when containerized
+            var container = group != null && group.parent != null ? group.parent.parent : null;
+            bool contained = group != null && group.name == "pickup" && container != null;
+            if (contained && container.name.IndexOf("Wooden Crate") != -1) {
+                if (container.childCount == 0) return null;
+                wantedId = "Wooden Crate " + container.GetChild(0).name;
+            } else if (!contained || container.name.IndexOf("Glass Bottle") != -1) {
+                wantedId = num;
+            } else {
+                return null; // unknown container type
             }
-        } catch { }
+        } catch { return null; }
+        foreach (Location location in Plugin.ArchipelagoClient.Locations.Values)
+            if (location.region == sceneName && location.id == wantedId) return location;
         return null;
     }
 
