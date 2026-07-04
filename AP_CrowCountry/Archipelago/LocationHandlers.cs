@@ -169,14 +169,10 @@ public class LocationHandlers
 
     public static void SendLocationFromPickup(Fsm __instance, FsmState toState) {
         string sceneName = __instance.GameObject.scene.name;
-        UnityEngine.Debug.Log(sceneName);
         string id = __instance.GameObject.transform.parent.parent.parent.parent.GetChild(0).name;
-        UnityEngine.Debug.Log(id);
         foreach (Location location in Plugin.ArchipelagoClient.Locations.Values) {
             if (location.region == sceneName && location.id == id) {
-                UnityEngine.Debug.Log("Sending location " + location.apid + " from pickup");
-                Plugin.ArchipelagoClient.SendLocationCheck(location.apid);
-                Plugin.ArchipelagoClient.ShowCheckPopup(location.apid);
+                SendAndPopup(location, "pickup");
                 break;
             }
         }
@@ -184,14 +180,10 @@ public class LocationHandlers
 
     public static void SendLocationFromCrate(Fsm __instance, FsmState toState) {
         string sceneName = __instance.GameObject.scene.name;
-        UnityEngine.Debug.Log(sceneName);
         string id = __instance.GameObject.transform.parent.parent.parent.parent.parent.parent.parent.GetChild(0).name;
-        UnityEngine.Debug.Log(id);
         foreach (Location location in Plugin.ArchipelagoClient.Locations.Values) {
             if (location.region == sceneName && location.id == "Wooden Crate "+ id) {
-                UnityEngine.Debug.Log("Sending location " + location.apid + " from pickup");
-                Plugin.ArchipelagoClient.SendLocationCheck(location.apid);
-                Plugin.ArchipelagoClient.ShowCheckPopup(location.apid);
+                SendAndPopup(location, "crate");
                 break;
             }
         }
@@ -199,17 +191,21 @@ public class LocationHandlers
 
     public static void SendLocationFromObject(Fsm __instance, FsmState toState) {
         string sceneName = __instance.GameObject.scene.name;
-        UnityEngine.Debug.Log(sceneName);
         string id = __instance.GameObject.transform.parent.parent.parent.name;
-        UnityEngine.Debug.Log(id);
         foreach (Location location in Plugin.ArchipelagoClient.Locations.Values) {
             if (location.region == sceneName && location.id == id) {
-                UnityEngine.Debug.Log("Sending location " + location.apid + " from trashcan");
-                Plugin.ArchipelagoClient.SendLocationCheck(location.apid);
-                Plugin.ArchipelagoClient.ShowCheckPopup(location.apid);
+                SendAndPopup(location, "trashcan");
                 break;
             }
         }
+    }
+
+    // checked-state must be captured BEFORE the send records the location
+    private static void SendAndPopup(Location location, string kind) {
+        bool alreadyChecked = ArchipelagoClient.ServerData.CheckedLocations.Contains(location.apid);
+        UnityEngine.Debug.Log($"Sending location {location.apid} from {kind} (already checked: {alreadyChecked})");
+        Plugin.ArchipelagoClient.SendLocationCheck(location.apid);
+        Plugin.ArchipelagoClient.ShowCheckPopup(location.apid, alreadyChecked);
     }
 
     // vanilla ArrayPickup "item type" branch values, from the add-item grant states
@@ -253,7 +249,9 @@ public class LocationHandlers
         if (loc == null) return;
         if (!Plugin.ArchipelagoClient.ScoutedLocations.TryGetValue(loc.apid, out var info)) return;
 
+        bool claimed = ArchipelagoClient.ServerData.CheckedLocations.Contains(loc.apid);
         string display = info.ForMe ? info.ItemName : $"{info.ItemName} → {info.PlayerName}";
+        if (claimed) display += " (already claimed)";
         int icon = info.ForMe && ItemFinder.itemIcons.TryGetValue(info.ItemName, out int mapped)
             ? mapped : ItemFinder.GenericIcon;
 
@@ -276,11 +274,14 @@ public class LocationHandlers
     /// true when the scouted item at this pickup is one of our own capped
     /// consumables -- the only case where vanilla's fullness check should
     /// apply. Unmapped or unscouted pickups stay fully vanilla (true).
+    /// Already-claimed pickups (respawned by a save reload) grant nothing,
+    /// so fullness must not block clearing them (false).
     /// </summary>
     private static bool ScoutedOwnConsumable(Fsm __instance) {
         Location loc = ResolveArrayPickup(__instance);
         if (loc == null) return true;
         if (!Plugin.ArchipelagoClient.ScoutedLocations.TryGetValue(loc.apid, out var info)) return true;
+        if (ArchipelagoClient.ServerData.CheckedLocations.Contains(loc.apid)) return false;
         return info.ForMe && consumableTypeInts.ContainsKey(info.ItemName);
     }
 

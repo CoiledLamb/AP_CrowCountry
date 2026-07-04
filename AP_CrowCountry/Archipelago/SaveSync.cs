@@ -6,6 +6,7 @@ using HarmonyLib;
 using Newtonsoft.Json;
 using com.sfbgames.playmaker;
 using APCrowCountry.Utils;
+using UnityEngine.SceneManagement;
 
 namespace APCrowCountry.Archipelago;
 
@@ -126,7 +127,9 @@ public static class SaveSync
         SeedMismatch = false;
         RunSeed = ArchipelagoClient.Authenticated ? ArchipelagoClient.ServerData.Seed : null;
         RunSlotName = ArchipelagoClient.Authenticated ? ArchipelagoClient.ServerData.SlotName : null;
-        Plugin.BepinLogger.LogInfo("SaveSync: new game; received items will apply into the fresh globals.");
+        Plugin.BepinLogger.LogInfo(
+            $"SaveSync: new game (blank globals load in scene '{SceneManager.GetActiveScene().name}'); " +
+            "received items will apply into the fresh globals.");
     }
 
     private static void OnGameplayLoaded(int slot)

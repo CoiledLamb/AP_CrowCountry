@@ -121,7 +121,12 @@ public class ArchipelagoClient
             Authenticated = true;
 
             DeathLinkHandler = new(session.CreateDeathLinkService(), ServerData.SlotName);
+            // two-way sync: push checks made offline, learn checks the server
+            // already has (drives "already claimed" pickup labeling)
             session.Locations.CompleteLocationChecksAsync(ServerData.CheckedLocations.ToArray());
+            foreach (long apid in session.Locations.AllLocationsChecked)
+                if (!ServerData.CheckedLocations.Contains(apid))
+                    ServerData.CheckedLocations.Add(apid);
             outText = $"Successfully connected to {ServerData.Uri} as {ServerData.SlotName}!";
 
             Locations = LoadLocationsFromFile();
@@ -328,12 +333,16 @@ public class ArchipelagoClient
 
     /// <summary>
     /// show the game's native item toast for a just-checked location:
-    /// our own items by name+icon, other players' items as "Sent: X -> Y"
+    /// our own items by name+icon, other players' items as "Sent: X -> Y".
+    /// Re-grabbing an already-checked location (save reload respawns the
+    /// world but checks can't roll back) grants nothing -- say so.
     /// </summary>
-    public void ShowCheckPopup(long apid)
+    public void ShowCheckPopup(long apid, bool alreadyChecked = false)
     {
         if (!ScoutedLocations.TryGetValue(apid, out ScoutedInfo info)) return;
-        if (info.ForMe) {
+        if (alreadyChecked) {
+            ItemFinder.ShowItemPopup("Already claimed:", info.ItemName, ItemFinder.GenericIcon);
+        } else if (info.ForMe) {
             int icon = ItemFinder.itemIcons.TryGetValue(info.ItemName, out int i) ? i : ItemFinder.GenericIcon;
             ItemFinder.ShowItemPopup("Obtained:", info.ItemName, icon);
         } else {
