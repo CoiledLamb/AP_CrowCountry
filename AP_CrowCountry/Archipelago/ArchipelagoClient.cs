@@ -17,7 +17,7 @@ namespace APCrowCountry.Archipelago;
 
 public class ArchipelagoClient
 {
-    public const string APVersion = "0.4.4";
+    public const string APVersion = "0.6.8";
     private const string Game = "Crow Country";
 
     public static bool Authenticated;
@@ -175,9 +175,9 @@ public class ArchipelagoClient
         } else if (helper.GetItemName(receivedItem.Item) == "Antidote") {
             ItemFinder.itemTypes["Antidotes"].Value++;
         } else if (helper.GetItemName(receivedItem.Item) == "Pocket Light") {
-            ItemFinder.controlledBools["light found"].Value = true;
+            ItemFinder.receivedBools.Add("light found");
         } else if (helper.GetItemName(receivedItem.Item) == "Handgun Laser Sight") {
-            ItemFinder.controlledBools["Handgun Laser"].Value = true;
+            ItemFinder.receivedBools.Add("Handgun Laser");
         } else if (helper.GetItemName(receivedItem.Item) == "Handgun Ammo") {
             ItemFinder.itemTypes["Ammo in Box"].Value += 8;
         } else if (helper.GetItemName(receivedItem.Item) == "Shotgun Ammo") {

@@ -1,4 +1,5 @@
 ﻿using BepInEx;
+using BepInEx.Configuration;
 using BepInEx.Logging;
 using APCrowCountry.Archipelago;
 using APCrowCountry.Utils;
@@ -19,6 +20,12 @@ public class Plugin : BaseUnityPlugin
     public static ManualLogSource BepinLogger;
     public static ArchipelagoClient ArchipelagoClient;
 
+    public static ConfigEntry<string> CfgHost;
+    public static ConfigEntry<string> CfgSlot;
+    public static ConfigEntry<string> CfgPassword;
+    public static ConfigEntry<bool> CfgAutoConnect;
+    private float autoConnectAt = 10f;
+
     private void Awake()
     {
         // Plugin startup logic
@@ -26,35 +33,41 @@ public class Plugin : BaseUnityPlugin
         ArchipelagoClient = new ArchipelagoClient();
         ArchipelagoConsole.Awake();
 
+        CfgHost = Config.Bind("Connection", "Host", "localhost:38281", "Archipelago server address (host:port)");
+        CfgSlot = Config.Bind("Connection", "SlotName", "", "Slot/player name in the multiworld");
+        CfgPassword = Config.Bind("Connection", "Password", "", "Server password (leave empty for none)");
+        CfgAutoConnect = Config.Bind("Connection", "AutoConnect", false, "Connect automatically shortly after launch");
+
+        ArchipelagoClient.ServerData.Uri = CfgHost.Value;
+        if (!CfgSlot.Value.IsNullOrWhiteSpace())
+            ArchipelagoClient.ServerData.SlotName = CfgSlot.Value;
+        ArchipelagoClient.ServerData.Password = CfgPassword.Value;
+
         ArchipelagoConsole.LogMessage($"{ModDisplayInfo} loaded!");
 
         var harmony = new Harmony("apcrowcountry.harmony");
         harmony.PatchAll();
     }
 
+    private bool showConnectUI;
+
     private void OnGUI()
     {
-        // show the mod is currently loaded in the corner
-        GUI.Label(new Rect(16, 16, 300, 20), ModDisplayInfo);
+        // minimal HUD: one status line; everything else lives behind F1
+        // (connection is normally config-driven - see chandler.apcrowcountry.cfg)
+        string status = ArchipelagoClient.Authenticated
+            ? $"AP: {ArchipelagoClient.ServerData.SlotName} connected"
+            : "AP: disconnected [F1]";
+        GUI.Label(new Rect(16, 16, 300, 20), status);
+
+        if (!showConnectUI)
+            return;
+
+        GUI.Label(new Rect(16, 36, 300, 20), $"{ModDisplayInfo} / {APDisplayInfo}");
         ArchipelagoConsole.OnGUI();
 
-        string statusMessage;
-        // show the Archipelago Version and whether we're connected or not
-        if (ArchipelagoClient.Authenticated)
+        if (!ArchipelagoClient.Authenticated)
         {
-            // if your game doesn't usually show the cursor this line may be necessary
-            // Cursor.visible = false;
-
-            statusMessage = " Status: Connected";
-            GUI.Label(new Rect(16, 50, 300, 20), APDisplayInfo + statusMessage);
-        }
-        else
-        {
-            // if your game doesn't usually show the cursor this line may be necessary
-            // Cursor.visible = true;
-
-            statusMessage = " Status: Disconnected";
-            GUI.Label(new Rect(16, 50, 300, 20), APDisplayInfo + statusMessage);
             GUI.Label(new Rect(16, 70, 150, 20), "Host: ");
             GUI.Label(new Rect(16, 90, 150, 20), "Player Name: ");
             GUI.Label(new Rect(16, 110, 150, 20), "Password: ");
@@ -73,10 +86,19 @@ public class Plugin : BaseUnityPlugin
                 ArchipelagoClient.Connect();
             }
         }
-        // this is a good place to create and add a bunch of debug buttons
     }
 
     private void Update() {
+        if (Input.GetKeyDown(KeyCode.F1))
+            showConnectUI = !showConnectUI;
+        // deferred so PlayMaker globals exist before the first connect attempt;
+        // retries every 30s until connected
+        if (CfgAutoConnect.Value && !ArchipelagoClient.Authenticated && Time.time > autoConnectAt)
+        {
+            autoConnectAt = Time.time + 30f;
+            ArchipelagoConsole.LogMessage($"Auto-connecting to {ArchipelagoClient.ServerData.Uri} as {ArchipelagoClient.ServerData.SlotName}...");
+            ArchipelagoClient.Connect();
+        }
         ItemFinder.Update();
     }
 }

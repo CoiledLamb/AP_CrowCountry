@@ -25,6 +25,23 @@ public class LocationHandlers
     {
         public static void Prefix(Fsm __instance, ref FsmState toState)
         {
+            // Not connected -> no location table; leave the game fully vanilla.
+            // Also never let an exception escape into Fsm.SwitchState: a throw
+            // here kills the state transition and soft-locks the player.
+            if (!ArchipelagoClient.Authenticated || Plugin.ArchipelagoClient?.Locations == null)
+                return;
+            try
+            {
+                HandleSwitchState(__instance, ref toState);
+            }
+            catch (System.Exception e)
+            {
+                Plugin.BepinLogger.LogError($"Location hook failed on '{__instance.GameObjectName}' -> '{toState.Name}': {e}");
+            }
+        }
+
+        private static void HandleSwitchState(Fsm __instance, ref FsmState toState)
+        {
             if (__instance.GameObjectName == "FLOW CODE" && __instance.GameObject.transform.parent.parent.parent.parent.name != "Pickup Trap" && __instance.GameObject.transform.parent.parent.parent.name.IndexOf("vending machine") == -1)
             {
                 //UnityEngine.Debug.Log(toState.Name);

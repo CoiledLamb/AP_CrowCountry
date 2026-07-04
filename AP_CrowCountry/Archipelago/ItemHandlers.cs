@@ -32,6 +32,12 @@ public class ItemFinder {
         "Handgun Laser"
     };
 
+    // Equipment flags received from the multiworld. The game's "New Game"
+    // flow resets all PlayMaker globals and loading a save overwrites them,
+    // so a one-shot write at receive time gets clobbered; Update() re-asserts
+    // these every frame instead.
+    public static readonly HashSet<string> receivedBools = new();
+
     private static bool initializedItems = false;
     private static bool initializedBools = false;
 
@@ -64,6 +70,14 @@ public class ItemFinder {
     }
 
     public static void Update() {
+        // vanilla light pickup only gets suppressed while actually randomized
+        if (!ArchipelagoClient.Authenticated) return;
+
+        foreach (string name in receivedBools) {
+            if (controlledBools.TryGetValue(name, out var fsmBool) && !fsmBool.Value)
+                fsmBool.Value = true;
+        }
+
         var anyPocketLight = GameObject.Find("pocket light setup");
         if (anyPocketLight != null) {
             anyPocketLight.SetActive(false);

@@ -106,5 +106,17 @@
         "pickup": true,
         "region": "Fairy Forest",
         "id": "0"
+    },
+    {
+        "apid": 510202418,
+        "pickup": false,
+        "region": "Fairy Forest",
+        "id": "Trash can 4"
+    },
+    {
+        "apid": 510202419,
+        "pickup": false,
+        "region": "Fairy Forest",
+        "id": "Trash can 5"
     }
 ]
