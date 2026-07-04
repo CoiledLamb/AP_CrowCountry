@@ -56,6 +56,25 @@ public class LocationHandlers
                     OverridePickupDisplay(__instance);
                 }
 
+                // Vanilla dupe protection: retype before the fullness
+                // dispatcher so its "full? N" branch evaluates the true AP
+                // item -- capped items say "I can't carry any more" and stay
+                // on the ground, uncollected, exactly like vanilla.
+                if (toState.Name.IndexOf("which type? 2") != -1) {
+                    OverridePickupDisplay(__instance);
+                }
+
+                // ...but our inventory caps must never hold a non-consumable
+                // or another player's item hostage: skip to the take prompt.
+                if (toState.Name.IndexOf("full?") != -1 && !ScoutedOwnConsumable(__instance)) {
+                    foreach (var t in toState.Transitions) {
+                        if (t.EventName == "not full") {
+                            toState = t.ToFsmState;
+                            break;
+                        }
+                    }
+                }
+
                 // Pickups
                 if (toState.Name.IndexOf("add item") != -1) {
                     // Wooden Crate
@@ -224,10 +243,10 @@ public class LocationHandlers
 
     /// <summary>
     /// rewrite the pickup FSM's local display vars ("item name", "display
-    /// number", "item type") before its "set ItemAction" state runs, so the
-    /// vanilla toast + raised model show the scouted AP item. "item type" is
-    /// only retyped for consumables that have a native model; the grant is
-    /// still suppressed at "add item" regardless of type.
+    /// number", "item type", "item description") so vanilla's toast, raised
+    /// model, examine text and fullness check all operate on the scouted AP
+    /// item. "item type" is only retyped for consumables that have a native
+    /// model; the grant is still suppressed at "add item" regardless of type.
     /// </summary>
     public static void OverridePickupDisplay(Fsm __instance) {
         Location loc = ResolveArrayPickup(__instance);
@@ -242,10 +261,27 @@ public class LocationHandlers
         if (nameVar != null) nameVar.Value = display;
         var displayVar = __instance.Variables.GetFsmInt("display number");
         if (displayVar != null) displayVar.Value = icon;
+        var descVar = __instance.Variables.GetFsmString("item description");
+        if (descVar != null)
+            descVar.Value = info.ForMe
+                ? $"It's a {info.ItemName}."
+                : $"It's {info.PlayerName}'s {info.ItemName}.";
         if (info.ForMe && consumableTypeInts.TryGetValue(info.ItemName, out int type)) {
             var typeVar = __instance.Variables.GetFsmInt("item type");
             if (typeVar != null) typeVar.Value = type;
         }
+    }
+
+    /// <summary>
+    /// true when the scouted item at this pickup is one of our own capped
+    /// consumables -- the only case where vanilla's fullness check should
+    /// apply. Unmapped or unscouted pickups stay fully vanilla (true).
+    /// </summary>
+    private static bool ScoutedOwnConsumable(Fsm __instance) {
+        Location loc = ResolveArrayPickup(__instance);
+        if (loc == null) return true;
+        if (!Plugin.ArchipelagoClient.ScoutedLocations.TryGetValue(loc.apid, out var info)) return true;
+        return info.ForMe && consumableTypeInts.ContainsKey(info.ItemName);
     }
 
     public static void SendSpecialLocation(string sceneName, string id) {

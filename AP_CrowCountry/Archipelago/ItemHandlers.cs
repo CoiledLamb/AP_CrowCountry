@@ -23,6 +23,10 @@ public class ItemFinder {
         "Ammo in Box MAX",
         "Shotgun in Box",
         "Shotgun in Box MAX",
+        "Magnum in Box",
+        "Magnum in Box MAX",
+        "Flame in Box",
+        "Flame in Box MAX",
         "ItemActionDisplay",
     };
 
@@ -55,12 +59,6 @@ public class ItemFinder {
     };
     public const int GenericIcon = 39; // "Paper" - neutral, used for other players' items
 
-    // consumable caps; the game's new-game/save-load flows overwrite these
-    // globals, so Update() re-asserts them while connected
-    private static readonly string[] uncappedMaxVars = {
-        "Heals Small MAX", "Heals Large MAX", "Ammo in Box MAX",
-        "Shotgun in Box MAX", "Antidotes MAX", "Grenades MAX",
-    };
 
     private static bool initializedItems = false;
     private static bool initializedBools = false;
@@ -127,11 +125,6 @@ public class ItemFinder {
     public static void Update() {
         // wrong save for this multiworld -> stay fully vanilla
         if (!ArchipelagoClient.Authenticated || SaveSync.SeedMismatch) return;
-
-        foreach (string name in uncappedMaxVars) {
-            if (itemTypes.TryGetValue(name, out var fsmInt) && fsmInt.Value != 999)
-                fsmInt.Value = 999;
-        }
 
         // vanilla light pickup only gets suppressed while actually randomized
         var anyPocketLight = GameObject.Find("pocket light setup");

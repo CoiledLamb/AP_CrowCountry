@@ -223,6 +223,7 @@ public class ArchipelagoClient
         }
     }
 
+    // amounts match the vanilla pickup FSMs' IntAdd values
     private static void ApplyItem(string name)
     {
         switch (name)
@@ -231,7 +232,8 @@ public class ArchipelagoClient
             case "Large Med Kit": ItemFinder.AddToCounter("Heals Large", 1); break;
             case "Antidote": ItemFinder.AddToCounter("Antidotes", 1); break;
             case "Handgun Ammo": ItemFinder.AddToCounter("Ammo in Box", 8); break;
-            case "Shotgun Ammo": ItemFinder.AddToCounter("Shotgun in Box", 8); break;
+            case "Shotgun Ammo": ItemFinder.AddToCounter("Shotgun in Box", 2); break;
+            case "Magnum Ammo": ItemFinder.AddToCounter("Magnum in Box", 3); break;
             case "Grenade": ItemFinder.AddToCounter("Grenades", 1); break;
             case "Pocket Light": ItemFinder.SetGlobalBool("light found"); break;
             case "Handgun Laser Sight": ItemFinder.SetGlobalBool("Handgun Laser"); break;
