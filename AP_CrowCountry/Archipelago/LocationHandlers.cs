@@ -75,53 +75,41 @@ public class LocationHandlers
                     }
                 }
 
-                // Pickups
+                // Pickups: suppress the vanilla grant and send the check --
+                // but ONLY for mapped locations. Unmapped pickups (areas not
+                // yet in locations.json) must stay fully vanilla, or their
+                // items are silently destroyed.
                 if (toState.Name.IndexOf("add item") != -1) {
-                    // Wooden Crate
-                    if (__instance.GameObject.transform.parent.parent.parent.parent.parent.parent.parent.name.IndexOf("Wooden Crate") != -1) {
-                        //UnityEngine.Debug.Log("Adding item");
-                        SendLocationFromCrate(__instance, toState);
+                    Location loc = ResolveArrayPickup(__instance);
+                    if (loc != null) {
+                        SendAndPopup(loc, "pickup");
                         toState = toState.Transitions[0].ToFsmState;
-                        //UnityEngine.Debug.Log(toState.Name);
-                    } else {
-                        //UnityEngine.Debug.Log("Adding item");
-                        SendLocationFromPickup(__instance, toState);
-                        toState = toState.Transitions[0].ToFsmState;
-                        //UnityEngine.Debug.Log(toState.Name);
                     }
                 }
             }
             if (__instance.GameObjectName == "flowcode" && __instance.GameObject.transform.parent.parent.parent.name.IndexOf("Trash can") != -1)
             {
-                UnityEngine.Debug.Log(toState.Name);
-
-                // Trashcan
+                // Trashcan (unmapped ones stay vanilla)
                 if (toState.Name.IndexOf("take") != -1) {
-                    //UnityEngine.Debug.Log("Adding item");
-                    SendLocationFromObject(__instance, toState);
-                    //UnityEngine.Debug.Log(toState.Name);
+                    Location loc = ResolveByObjectName(__instance);
+                    if (loc != null) SendAndPopup(loc, "trashcan");
                 }
-                if (toState.Name.IndexOf("add") != -1) {
-                    //UnityEngine.Debug.Log("Adding item");
+                if (toState.Name.IndexOf("add") != -1 && ResolveByObjectName(__instance) != null) {
                     toState = toState.Transitions[0].ToFsmState;
-                    //UnityEngine.Debug.Log(toState.Name);
                 }
             }
             if (__instance.GameObjectName == "FLOW CODE" && __instance.GameObject.transform.parent.parent.parent.name.IndexOf("vending machine") != -1)
             {
-                //UnityEngine.Debug.Log(toState.Name);
-
-                // Vending Machine
-                if (toState.Name.IndexOf("given heals already?") != -1) {
-                    //UnityEngine.Debug.Log("Adding item");
+                // Vending Machine (unmapped ones stay vanilla)
+                if (toState.Name.IndexOf("given heals already?") != -1 && ResolveByObjectName(__instance) != null) {
                     toState = toState.Transitions[0].ToFsmState;
-                    //UnityEngine.Debug.Log(toState.Name);
                 }
                 if (toState.Name.IndexOf("add") != -1) {
-                    //UnityEngine.Debug.Log("Adding item");
-                    SendLocationFromObject(__instance, toState);
-                    toState = toState.Transitions[0].ToFsmState;
-                    //UnityEngine.Debug.Log(toState.Name);
+                    Location loc = ResolveByObjectName(__instance);
+                    if (loc != null) {
+                        SendAndPopup(loc, "vending machine");
+                        toState = toState.Transitions[0].ToFsmState;
+                    }
                 }
             }
             if (__instance.GameObjectName == "Select a Pickup") {
@@ -167,37 +155,15 @@ public class LocationHandlers
         }
     }*/
 
-    public static void SendLocationFromPickup(Fsm __instance, FsmState toState) {
+    /// <summary>resolve trash cans / vending machines by their object name</summary>
+    private static Location ResolveByObjectName(Fsm __instance) {
         string sceneName = __instance.GameObject.scene.name;
-        string id = __instance.GameObject.transform.parent.parent.parent.parent.GetChild(0).name;
-        foreach (Location location in Plugin.ArchipelagoClient.Locations.Values) {
-            if (location.region == sceneName && location.id == id) {
-                SendAndPopup(location, "pickup");
-                break;
-            }
-        }
-    }
-
-    public static void SendLocationFromCrate(Fsm __instance, FsmState toState) {
-        string sceneName = __instance.GameObject.scene.name;
-        string id = __instance.GameObject.transform.parent.parent.parent.parent.parent.parent.parent.GetChild(0).name;
-        foreach (Location location in Plugin.ArchipelagoClient.Locations.Values) {
-            if (location.region == sceneName && location.id == "Wooden Crate "+ id) {
-                SendAndPopup(location, "crate");
-                break;
-            }
-        }
-    }
-
-    public static void SendLocationFromObject(Fsm __instance, FsmState toState) {
-        string sceneName = __instance.GameObject.scene.name;
-        string id = __instance.GameObject.transform.parent.parent.parent.name;
-        foreach (Location location in Plugin.ArchipelagoClient.Locations.Values) {
-            if (location.region == sceneName && location.id == id) {
-                SendAndPopup(location, "trashcan");
-                break;
-            }
-        }
+        try {
+            string id = __instance.GameObject.transform.parent.parent.parent.name;
+            foreach (Location location in Plugin.ArchipelagoClient.Locations.Values)
+                if (location.region == sceneName && location.id == id) return location;
+        } catch { }
+        return null;
     }
 
     // checked-state must be captured BEFORE the send records the location
